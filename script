@@ -1,0 +1,275 @@
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer;
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local function createButton(parent, text, callback)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0.9, 0, 0, 32)
+	btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.Font = Enum.Font.SourceSansBold;
+	btn.TextSize = 15;
+	btn.Text = text;
+	btn.Parent = parent;
+	btn.MouseButton1Click:Connect(callback)
+	return btn
+end;
+local gui = Instance.new("ScreenGui", game.CoreGui)
+gui.Name = ""
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 280, 0, 260)
+frame.Position = UDim2.new(0.5, -140, 0.5, -130)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.BorderSizePixel = 0;
+frame.Active = true;
+local dragging, dragInput, dragStart, startPos;
+frame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true;
+		dragStart = input.Position;
+		startPos = frame.Position;
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+frame.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
+end)
+UserInputService.InputChanged:Connect(function(input)
+	if dragging and input == dragInput then
+		local delta = input.Position - dragStart;
+		frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+end)
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+title.Text = "Script"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.SourceSansBold;
+title.TextSize = 18;
+local scroll = Instance.new("ScrollingFrame", frame)
+scroll.Size = UDim2.new(1, 0, 1, -30)
+scroll.Position = UDim2.new(0, 0, 0, 30)
+scroll.ScrollBarThickness = 4;
+scroll.BackgroundTransparency = 1;
+local layout = Instance.new("UIListLayout", scroll)
+layout.Padding = UDim.new(0, 6)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center;
+scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+end)
+local stealPos, lockBasePos, tpPart, infJump, infJumpDebounce;
+createButton(scroll, "Save Position For TP", function()
+	stealPos = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart").Position
+end)
+createButton(scroll, "TP To Saved Position", function()
+	if stealPos then
+		LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(stealPos)
+	end
+end)
+
+local noclipEnabled = false;
+createButton(scroll, "Toggle Noclip", function()
+	noclipEnabled = not noclipEnabled
+end)
+RunService.Stepped:Connect(function()
+	if noclipEnabled and LocalPlayer.Character then
+		for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	end
+end)
+
+createButton(scroll, "Infinite Jump", function()
+	if infJump then
+		infJump:Disconnect()
+	end;
+	infJumpDebounce = false;
+	infJump = UserInputService.JumpRequest:Connect(function()
+		if not infJumpDebounce then
+			infJumpDebounce = true;
+			LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping)
+			task.wait()
+			infJumpDebounce = false
+		end
+	end)
+end)
+
+createButton(scroll, "Speed Hack", function()
+	pcall(function()
+		LocalPlayer.Character:WaitForChild("Humanoid").WalkSpeed = 65;
+		LocalPlayer.Character:WaitForChild("Humanoid"):GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+			pcall(function()
+				LocalPlayer.Character.Humanoid.WalkSpeed = 65
+			end)
+		end)
+	end)
+end)
+
+createButton(scroll, "ESP", function()
+    pcall(function()
+        local Players = game:GetService("Players")
+        local LocalPlayer = Players.LocalPlayer
+        local Workspace = game:GetService("Workspace")
+
+        -- Toggle ESP state
+        _G.ESPEnabled = not _G.ESPEnabled
+
+        -- Clear previous ESP if disabling
+        if not _G.ESPEnabled then
+            for _, v in pairs(Workspace:GetDescendants()) do
+                if v.Name == "ESPBox" or v.Name == "ESPBillboard" then
+                    v:Destroy()
+                end
+            end
+            for _, v in pairs(game.CoreGui:GetChildren()) do
+                if v.Name == "ESPBillboard" then
+                    v:Destroy()
+                end
+            end
+            return
+        end
+
+        -- Function to apply ESP
+        local function applyESP(player, char)
+            if player == LocalPlayer then return end
+            if not _G.ESPEnabled then return end
+
+            local head = char:WaitForChild("Head", 5)
+            local root = char:WaitForChild("HumanoidRootPart", 5)
+            if not head or not root then return end
+
+            -- Name tag
+            local billboard = Instance.new("BillboardGui")
+            billboard.Name = "ESPBillboard"
+            billboard.Size = UDim2.new(0, 100, 0, 50)
+            billboard.Adornee = head
+            billboard.AlwaysOnTop = true
+
+            local text = Instance.new("TextLabel")
+            text.Size = UDim2.new(1, 0, 1, 0)
+            text.BackgroundTransparency = 1
+            text.TextColor3 = Color3.fromRGB(255, 255, 255)
+            text.TextStrokeTransparency = 0
+            text.TextScaled = true
+            text.Text = player.Name
+            text.Parent = billboard
+            billboard.Parent = game.CoreGui
+
+            -- Box
+            local box = Instance.new("BoxHandleAdornment")
+            box.Name = "ESPBox"
+            box.Adornee = root
+            box.Size = Vector3.new(2, 5, 1)
+            box.Color3 = Color3.fromRGB(255, 255, 255)
+            box.Transparency = 0.5
+            box.AlwaysOnTop = true
+            box.ZIndex = 10
+            box.Parent = Workspace
+        end
+
+        -- Function to handle a player
+        local function addESP(player)
+            if player == LocalPlayer then return end
+
+            -- Apply immediately if character exists
+            if player.Character then
+                applyESP(player, player.Character)
+            end
+
+            -- Apply on respawn
+            player.CharacterAdded:Connect(function(char)
+                -- Small delay to ensure body parts exist
+                task.wait(1)
+                applyESP(player, char)
+            end)
+        end
+
+        -- Add ESP to all current players
+        for _, player in pairs(Players:GetPlayers()) do
+            addESP(player)
+        end
+
+        -- Add ESP for new players
+        Players.PlayerAdded:Connect(addESP)
+    end)
+end)
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local aimbotEnabled = false
+local lockedTarget = nil
+
+-- Wait for camera and character to exist
+local function waitForReady()
+    repeat task.wait() until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    repeat task.wait() until Workspace.CurrentCamera
+end
+waitForReady()
+
+-- Function to get the player your camera is pointing at
+local function getLookedAtPlayer()
+    local camera = Workspace.CurrentCamera
+    if not camera then return nil end
+
+    local closestPlayer = nil
+    local shortestAngle = math.huge
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local root = player.Character.HumanoidRootPart
+            local dirToPlayer = (root.Position - camera.CFrame.Position).Unit
+            local angle = math.acos(dirToPlayer:Dot(camera.CFrame.LookVector))
+            if angle < shortestAngle then
+                shortestAngle = angle
+                closestPlayer = player
+            end
+        end
+    end
+
+    return closestPlayer
+end
+
+-- Toggle aimbot on Z press
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.Z then
+        if aimbotEnabled then
+            aimbotEnabled = false
+            lockedTarget = nil
+        else
+            lockedTarget = getLookedAtPlayer()
+            if lockedTarget then
+                aimbotEnabled = true
+            end
+        end
+    end
+end)
+
+-- Make the camera follow the target while enabled
+RunService.RenderStepped:Connect(function()
+    if aimbotEnabled and lockedTarget and lockedTarget.Character and lockedTarget.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = lockedTarget.Character.HumanoidRootPart
+        local camera = Workspace.CurrentCamera
+        if camera and hrp then
+            pcall(function()
+                camera.CFrame = CFrame.new(camera.CFrame.Position, hrp.Position)
+            end)
+        end
+    end
+end)
